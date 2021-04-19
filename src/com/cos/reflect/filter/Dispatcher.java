@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.util.Enumeration;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -50,12 +52,30 @@ public class Dispatcher implements Filter{
 		for (Method method : methods) {
 			Annotation annotation = method.getDeclaredAnnotation(RequestMapping.class);
 			RequestMapping requestMapping = (RequestMapping) annotation;
-			System.out.println(requestMapping.value());
+			//System.out.println(requestMapping.value());
 			if(requestMapping.value().equals(endPoint)) {
 				try {
-					String path =(String)method.invoke(userController);
-					
-					// 리퀘스트디스패처는 내부실행이라 필터를 타지 않는다.(?) 
+					Parameter[] params = method.getParameters();
+					String path = null;
+					if(params.length != 0) {
+						// 언제는 logindto일거고 또 언제는 joindto 일거니까 Object
+						// System.out.println("params[0].getType() : " + params[0].getType());
+						Object dtoInstance = params[0].getType().newInstance();
+//						String username = request.getParameter("username");
+//						String password = request.getParameter("password");
+//						System.out.println("username :" + username);
+//						System.out.println("password :" + password);
+						Enumeration<String> keys = request.getParameterNames(); // username, password
+						//keys 값을 변형 username => setUsername
+						//keys 값을 변형 password => setPassword
+						String keyMethodname = "set" + "Username";
+						path = "/"; 
+						
+					}else {
+						path =(String)method.invoke(userController);
+					}
+
+					// 리퀘스트디스패처는 내부실행이라 필터를 다시 타지 않는다
 					// 내부에서 / 를 찾기때문에 인덱스파일로 가진다
 					RequestDispatcher dis = request.getRequestDispatcher(path);
 					dis.forward(request, response);
