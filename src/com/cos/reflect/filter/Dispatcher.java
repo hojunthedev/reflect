@@ -1,6 +1,7 @@
 package com.cos.reflect.filter;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -22,6 +23,8 @@ import com.cos.reflect.controller.UserController;
 //목적 : 분기(라우터의 역할)
 public class Dispatcher implements Filter{
 
+	private boolean isMatching = false;
+	
 	@Override
 	public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)
 			throws IOException, ServletException {
@@ -39,38 +42,25 @@ public class Dispatcher implements Filter{
 		// 리플렉션 -> 메서드를 런타임 시점에서 찾아내서 실행
 		UserController  userController = new UserController();
 		Method[] methods = userController.getClass().getDeclaredMethods();
-//		for (Method method : methods) {
-//			if(endPoint.equals("/"+method.getName())) {
-//				try {
-//					method.invoke(userController);
-//				} catch (Exception e) {
-//					e.printStackTrace();
-//				} 
-//			}
-//		}
-	
+		
 		for (Method method : methods) {
 			Annotation annotation = method.getDeclaredAnnotation(RequestMapping.class);
 			RequestMapping requestMapping = (RequestMapping) annotation;
-			//System.out.println(requestMapping.value());
 			if(requestMapping.value().equals(endPoint)) {
+				isMatching = true;
 				try {
 					Parameter[] params = method.getParameters();
 					String path = null;
 					if(params.length != 0) {
 						// 언제는 logindto일거고 또 언제는 joindto 일거니까 Object
-						// System.out.println("params[0].getType() : " + params[0].getType());
+						// 0 주는 이유는 , dto 쓰니까 
 						Object dtoInstance = params[0].getType().newInstance();
-//						String username = request.getParameter("username");
-//						String password = request.getParameter("password");
-//						System.out.println("username :" + username);
-//						System.out.println("password :" + password);
-						Enumeration<String> keys = request.getParameterNames(); // username, password
-						//keys 값을 변형 username => setUsername
-						//keys 값을 변형 password => setPassword
-						String keyMethodname = "set" + "Username";
-						path = "/"; 
 						
+						//기본 자료형이면 리턴 받아야겠지만, 제네릭은 참조형인거같음.
+						setData(dtoInstance, request);
+						
+						// invoke(메소드를 호출할 객체, 전달 할 파라미터)
+						path = (String)method.invoke(userController, dtoInstance);
 					}else {
 						path =(String)method.invoke(userController);
 					}
@@ -80,13 +70,49 @@ public class Dispatcher implements Filter{
 					RequestDispatcher dis = request.getRequestDispatcher(path);
 					dis.forward(request, response);
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 				break;
-			}
+			} 
 		}
+		if(isMatching == false) {
+			System.out.println("요청주소없음");
+			response.setContentType("text/html; charset=utf-8");
+			PrintWriter out = response.getWriter();
+			out.println("잘못된 주소 요청입니다. 404 에러");
+			out.flush();
+		}
+	}
+	
+	//오브젝트보다는 제네릭으로 선언하는게 편하지
+	private <T> void setData(T instance, HttpServletRequest request) {
+		Enumeration<String> keys = request.getParameterNames(); // 로그인의 경우 크기 : 2(username, password)
 		
+		while(keys.hasMoreElements()) {
+			String key = (String) keys.nextElement();
+			String methodKey = keyToMethodKey(key);
+			
+			Method[] methods = instance.getClass().getDeclaredMethods();
+			
+			for (Method method : methods) {
+				if(method.getName().equals(methodKey)) {
+					try {
+						method.invoke(instance, request.getParameter(key));
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+			
+			
+		}
+	}
+	
+	private String keyToMethodKey(String key) {
+		String firstKey = "set";
+		String upperKey = key.substring(0,1).toUpperCase();
+		String remainKey = key.substring(1);
 		
+		return firstKey + upperKey + remainKey;
 	}
 }
